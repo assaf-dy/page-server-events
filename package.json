@@ -1,0 +1,22 @@
+{
+  "name": "server-page-events",
+  "version": "0.0.1",
+  "author": "Dynamic Yield",
+  "main": "src/main.js",
+  "dependencies": {
+    "express": "^4.13.4",
+    "ioredis": "^1.15.1",
+    "lodash": "^4.10.0",
+    "minimist": "^1.1.1",
+    "node-cache": "^3.2.1",
+    "winston": "^0.9.0"
+  },
+  "devDependencies": {
+    "autoresolve": "0.0.3"
+  },
+  "scripts": {
+    "start": "node src/main.js --env=production",
+    "start-dev": "node src/main.js"
+  },
+  "private": true
+}
