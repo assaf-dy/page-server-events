@@ -118,4 +118,4 @@ api.get('/pollingEvent', function (req, res) {
   }
 });
 
-api.listen(12311);
+api.listen(config.HTTP_PORT || 12311);
