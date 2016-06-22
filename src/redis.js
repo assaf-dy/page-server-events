@@ -17,10 +17,10 @@ function makeKey() {
   return result.substring(0, result.length - 1);
 }
 
-exports.getUserEvents = function (userId, eventId) {
-  return redis.hget(userId, eventId);
+exports.getUserEvents = function (userId) {
+  return redis.hgetall(userId);
 };
 
-exports.saveUserEvents = function (userId, eventId, status) {
-  redis.hset(userId, eventId, status);
+exports.saveUserEvents = function (userId, eventId, eventData) {
+  redis.hset(userId, eventId, eventData);
 };

@@ -30,18 +30,25 @@ api.use(function(req, res, next) {
   });
 });
 
-function updateUserEvents(userId, userEvents, eventId) {
+function updateUserEvents(userId, userEvents) {
+  console.log('updateuserEvents', userEvents, typeof userEvents);
   cache.set(userId, userEvents, function (err, success) {
     if (!err && success) {
       console.log('success');
-      worker.pushEvent(userId, eventId, userEvents[eventId]);
+      worker.pushEvent(userId, userEvents);
     }
   });
 }
 
-api.get('/triggerEvent', function (req, res) {
+api.post('/triggerEvent', function (req, res) {
   var userId = req.query.userId;
   var eventId = req.query.eventId;
+  var eventData = req.body;
+  try {
+    eventData = JSON.parse(req.body);
+  } catch (e) {
+    res.end('illegal request body');
+  }
   if (typeof userId === 'undefined' || typeof eventId === 'undefined') {
     res.statusCode = 401;
     res.end();
@@ -50,8 +57,11 @@ api.get('/triggerEvent', function (req, res) {
       if (typeof userEvents === 'undefined') {
         userEvents = {};
       }
-      userEvents[eventId] = status.TRIGGERED;
-      updateUserEvents(userId, userEvents, eventId);
+      userEvents[eventId] = {
+        status: status.TRIGGERED,
+        data: eventData
+      };
+      updateUserEvents(userId, userEvents);
       res.statusCode = 200;
       res.end('OK');
     });
@@ -60,8 +70,7 @@ api.get('/triggerEvent', function (req, res) {
 
 api.get('/pollingEvent', function (req, res) {
   var userId = req.query.userId;
-  var eventId = req.query.eventId;
-  if (typeof userId === 'undefined' || typeof eventId === 'undefined') {
+  if (typeof userId === 'undefined') {
     res.statusCode = 401;
     res.end();
   } else {
@@ -70,46 +79,44 @@ api.get('/pollingEvent', function (req, res) {
         res.statusCode = 500;
         res.end();
       } else {
-        if (typeof userEvents !== 'undefined' && typeof userEvents[eventId] !== 'undefined') {
+        //cache found it
+        if (typeof userEvents !== 'undefined') {
           console.log('cache found it');
-          if (userEvents[eventId] == status.NOT_TRIGGERED_YET || userEvents[eventId] == status.POPED) {
-            res.statusCode = 200;
-            res.end(status.NOT_TRIGGERED_YET.toString());
-          } else {
-            userEvents[eventId] = status.POPED;
-            updateUserEvents(userId, userEvents, eventId);
-            res.statusCode = 200;
-            res.end(status.TRIGGERED.toString());
-          }
-        }
-        else {
-          console.log('cache didnt found it, going to redis');
-          if (typeof userEvents === 'undefined') {
-            userEvents = {};
-          }
-          if (typeof userEvents[eventId] === 'undefined') {
-            userEvents[eventId] = status.NOT_TRIGGERED_YET;
-          }
-          return worker.popEvent(userId, eventId).then(function(redisStatus) {
-            console.log('redisStatus', redisStatus);
-            if (redisStatus === false) {
-              updateUserEvents(userId, userEvents, eventId);
-              res.statusCode = 200;
-              res.end(status.NOT_TRIGGERED_YET.toString());
-            } else {
-              if (redisStatus == status.NOT_TRIGGERED_YET || redisStatus == status.POPED) {
-                userEvents[eventId] = redisStatus;
-                cache.set(userId, userEvents, function () {
-                  console.log('cache is set');
-                  res.statusCode = 200;
-                  res.end(status.NOT_TRIGGERED_YET.toString());
-                });
-              } else {
-                userEvents[eventId] = status.POPED;
-                updateUserEvents(userId, userEvents, eventId);
-                res.statusCode = 200;
-                res.end(status.TRIGGERED.toString());
+          var result = JSON.parse(JSON.stringify(userEvents));
+          for (var eventId in userEvents) {
+            if (userEvents.hasOwnProperty(eventId)) {
+              if (userEvents[eventId].status == status.TRIGGERED) {
+                userEvents[eventId].status = status.POPED;
+                userEvents[eventId].data = '';
               }
+            }
+            updateUserEvents(userId, userEvents);
+          }
+          res.end(JSON.stringify(result));
+        } else {
+          return worker.popEvent(userId).then(function(eventsObject) {
+            console.log('eventObject', Object.keys(eventsObject).length);
+            //redis found nothing
+            if (Object.keys(eventsObject).length === 0) {
+              updateUserEvents(userId, eventsObject);
+              res.statusCode = 200;
+              res.end(JSON.stringify(eventsObject));
+            } else {
+              console.log('redis found it');
+              var result = JSON.parse(JSON.stringify(eventsObject));
+              for (var eventId in eventsObject) {
+                if (eventsObject.hasOwnProperty(eventId)) {
+                  eventsObject[eventId] = JSON.parse(eventsObject[eventId]);
+                  result[eventId] = JSON.parse(result[eventId]);
+                  console.log(eventsObject, typeof eventsObject, eventsObject[eventId], typeof eventsObject[eventId]);
+                  if (eventsObject[eventId].status == status.TRIGGERED) {
+                    eventsObject[eventId].status = status.POPED;
+                    eventsObject[eventId].data = '';
+                  }
+                }
+              }
+              updateUserEvents(userId, eventsObject);
+              res.end(JSON.stringify(result));
             }
           });
         }
